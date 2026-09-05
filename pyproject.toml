@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "geekmagic-ai-monitor"
+version = "0.1.0"
+description = "Cross-platform AI usage dashboard pusher for GeekMagic SmallTV Ultra."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "filelock>=3.19,<4.0",
+  "httpx>=0.28.1,<1.0",
+  "pillow>=11.3,<13.0",
+  "pystray>=0.19.5,<0.20",
+  "tzdata>=2025.2",
+]
+
+[project.scripts]
+geekmagic-ai-monitor = "geekmagic_ai_monitor.cli:main"
+geekmagic-ai-monitor-tray = "geekmagic_ai_monitor.tray:main"
+
+[dependency-groups]
+dev = [
+  "mypy>=1.17,<2.0",
+  "pytest>=8.4,<10.0",
+  "pytest-asyncio>=1.1,<2.0",
+  "ruff>=0.12,<1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/geekmagic_ai_monitor"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
