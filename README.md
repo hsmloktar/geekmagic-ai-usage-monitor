@@ -70,26 +70,22 @@ macOS 준비 및 실행 방법은 아래의 **Phase 8 macOS 실행·실기 검�
 
 기본 설정은 `appsettings.json`에 있습니다. 실제 장치 주소는 Git에서 제외되는
 `appsettings.local.json`에 같은 구조로 작성합니다. 로컬 설정은 기본 설정을 덮어씁니다.
+파일이 없다면 프로젝트 루트의 `appsettings.json`과 같은 위치에
+`appsettings.local.json`이라는 이름으로 새 텍스트 파일을 만듭니다. Windows에서 파일을
+만들 때 이름 끝에 `.txt`가 붙지 않도록 확인합니다.
 
 ```json
 {
   "GeekMagic": {
-    "Host": "192.168.0.100"
-  },
-  "Codex": {
-    "Executable": "codex",
-    "RequestTimeoutSeconds": 15
-  },
-  "Claude": {
-    "Executable": "claude",
-    "RequestTimeoutSeconds": 20
-  },
-  "UpdateIntervalSeconds": 60
+    "Host": "192.168.0.144"
+  }
 }
 ```
 
-저장소의 기본 `Host`는 비워 두었습니다. 실제 GeekMagic 기기의 IP는 `appsettings.local.json`에만
-저장됩니다.
+`192.168.0.144` 부분만 해당 사용자의 GeekMagic IP 주소로 바꿉니다. 저장소의 기본 `Host`는
+비워 두었으며, 실제 주소는 `appsettings.local.json`에만 저장됩니다. 실행 중인 앱은 설정을
+자동으로 다시 읽지 않으므로 주소를 저장한 뒤 Windows 알림 영역 또는 macOS 메뉴 막대에서
+`종료`를 선택하고 앱을 다시 실행합니다.
 
 ## 명령
 
