@@ -96,8 +96,5 @@ def test_reset_schedule_is_formatted_in_dashboard_timezone() -> None:
     five_hour_reset_at = datetime(2026, 9, 2, 15, 30, tzinfo=UTC)
     weekly_reset_at = datetime(2026, 9, 7, 15, 0, tzinfo=UTC)
 
-    assert (
-        _format_reset_schedule(five_hour_reset_at, weekly_reset_at, korea)
-        == "00:30 · W 09/08"
-    )
+    assert _format_reset_schedule(five_hour_reset_at, weekly_reset_at, korea) == "00:30 · W 09/08"
     assert _format_reset_schedule(None, None, korea) == "--:-- · W --/--"

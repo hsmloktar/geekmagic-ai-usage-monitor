@@ -3,11 +3,12 @@
 GeekMagic SmallTV Ultra의 순정 펌웨어를 유지하면서 Windows와 macOS에서 생성한
 240×240 AI 사용량 대시보드를 로컬 네트워크로 전송하는 프로젝트입니다.
 
-현재 상태는 **Phase 7 구현**입니다. 현재 컴퓨터에 로그인된 Codex 및 Claude 계정의
+현재 상태는 **Phase 9 완료**입니다. 현재 컴퓨터에 로그인된 Codex 및 Claude 계정의
 5시간/주간 사용량을 읽고, 240×240 대시보드로 렌더링해 GeekMagic으로 60초마다
 전송합니다. Windows 장기 실행을 위한 중복 실행 방지, 회전 파일 로그, 안정적인 실행
 스크립트와 종료 처리에 더해, 창 없는 알림 영역 앱과 바탕화면 바로가기를 제공합니다.
-macOS 관련 작업은 별도 후순위 단계로 진행합니다.
+macOS에서는 창과 Dock 아이콘이 없는 메뉴 막대 앱을 바탕화면 바로가기로 직접 실행합니다.
+Windows와 macOS 모두 로그인 자동 실행은 사용하지 않습니다.
 
 ## 기술 선택
 
@@ -37,8 +38,8 @@ src/geekmagic_ai_monitor/
 tests/              # 자동화 테스트
 ```
 
-Phase 7에서는 provider 공통 protocol, 장기 실행 `UpdateService`, Windows 운영 지원과
-알림 영역 UI까지 구현되어 있습니다.
+provider 공통 protocol, 장기 실행 `UpdateService`, Windows 운영 지원과 알림 영역 UI,
+macOS 터미널 실행 진입점 및 메뉴 막대 앱까지 구현되어 있습니다.
 
 ## 개발 환경 준비
 
@@ -63,7 +64,7 @@ Windows 바탕화면 실행 스크립트는 실행할 때 레지스트리에 저
 다시 읽습니다. 따라서 npm 전역 경로를 사용자 PATH에 등록한 뒤에는 Windows에서
 로그아웃하지 않아도 새로 설치한 `codex` 명령을 사용할 수 있습니다.
 
-macOS에서도 같은 명령을 사용합니다.
+macOS 준비 및 실행 방법은 아래의 **Phase 8 macOS 실행·실기 검증**을 참고합니다.
 
 ## 설정
 
@@ -87,12 +88,13 @@ macOS에서도 같은 명령을 사용합니다.
 }
 ```
 
-저장소의 기본 `Host`는 비워 두었습니다. 현재 PC의 실제 IP는 `appsettings.local.json`에만
+저장소의 기본 `Host`는 비워 두었습니다. 실제 GeekMagic 기기의 IP는 `appsettings.local.json`에만
 저장됩니다.
 
 ## 명령
 
-모든 명령은 프로젝트 루트에서 실행합니다.
+직접 실행하는 CLI 명령은 프로젝트 루트에서 실행합니다. Windows/macOS 실행 스크립트는
+다른 디렉터리에서도 사용할 수 있습니다.
 
 ```powershell
 # 읽기 전용: 펌웨어 모델과 버전 확인
@@ -331,6 +333,163 @@ Windows 로그인 자동 실행은 사용하지 않습니다. 바탕화면의 `G
 - 실행 잠금과 운영 로그 생성 확인
 - 알림 영역 `종료` 메뉴로 아이콘과 프로세스가 종료되는지 확인
 
+## Phase 8 macOS 실행·실기 검증
+
+macOS에서는 `macos/run-monitor.sh`를 터미널에서 실행합니다. 스크립트가 자신의 위치를
+기준으로 프로젝트 루트와 설정·출력·로그·잠금 경로를 계산하고, provider의 작업 디렉터리도
+프로젝트 루트로 고정합니다. 경로에 공백이 있거나 다른 디렉터리에서 실행해도 동작하며,
+`uv run --locked`로 저장소의 잠금 파일에 맞는 환경을 사용합니다.
+
+### 준비 및 실행
+
+[uv](https://docs.astral.sh/uv/)와 Codex CLI, Claude Code를 설치하고 이 Mac에서 두 CLI에
+로그인합니다. Windows의 인증 파일을 옮기지 않습니다. `uv`가 PATH에 없다면 새 터미널을
+열거나 기본 설치 경로인 `$HOME/.local/bin`을 PATH에 추가합니다.
+
+```bash
+# 프로젝트 루트에서 환경 준비 및 실행 파일 확인
+export PATH="$HOME/.local/bin:$PATH"
+uv sync --locked
+command -v uv codex claude
+codex --version
+claude --version
+
+# appsettings.local.json에 실제 GeekMagic.Host를 설정한 뒤 읽기 전용 확인
+uv run geekmagic-ai-monitor probe
+
+# 네트워크를 사용하지 않는 MAC 샘플 대시보드
+uv run geekmagic-ai-monitor render-dashboard-test
+
+# 로그인된 두 계정의 사용량으로 로컬 대시보드 생성
+uv run geekmagic-ai-monitor render-live-usage
+
+# 한 번 조회·렌더링·기기 전송
+./macos/run-monitor.sh --once
+
+# 시작 직후 전송하고 이후 60초마다 갱신. Ctrl+C로 종료
+./macos/run-monitor.sh
+```
+
+다른 작업 디렉터리에서는 `"/프로젝트/절대 경로/macos/run-monitor.sh" --once`처럼 실행합니다.
+현재 이미지, 로그, 잠금 파일 위치는 Windows와 동일하게 프로젝트의 `artifacts/` 아래이며,
+대시보드 오른쪽 위에는 `MAC`을 표시합니다. `Ctrl+C`로 종료하면 실행 잠금이 해제되고 기기는
+마지막 화면을 유지합니다. 실행 중인 모니터가 있으면 `--once`도 `already running`으로
+차단되므로, 한 번 실행할 때도 기존 모니터를 먼저 종료해야 합니다.
+
+업데이트할 때는 실행 중인 모니터를 종료하고 저장소를 업데이트한 뒤 `uv sync --locked`를
+실행하고 다시 시작합니다. 이 단계의 실행은 터미널이 열려 있는 동안 유지되며, Mac이 잠든
+동안에는 갱신되지 않습니다. Windows와 Mac에서 동시에 전송하면 마지막으로 전송한
+컴퓨터의 화면이 표시됩니다.
+
+### 검증 결과
+
+2026-09-06 macOS 26.6.2 / Apple Silicon에서 Python 3.12.14, uv 0.12.10,
+Codex CLI 0.153.4, Claude Code 2.1.263으로 다음을 확인했습니다.
+
+- 프로젝트 밖 `/private/tmp`에서 실행 스크립트로 사용량 조회 및 실제 기기 전송 성공
+- `SmallTV-Ultra / Ultra-V9.0.51` 확인, 전송 후 `theme=3` 및 16 KB JPEG 확인
+- Codex와 Claude 5시간·주간 사용량 조회, Claude의 0토큰·0비용 확인
+- Claude의 `Sep 6 at 9:59pm (Asia/Seoul)` 리셋 시각 형식 지원 추가. 기존
+  `Sep 3, 12:30am (Asia/Seoul)` 형식도 계속 지원
+- 17:21:34와 17:22:34에 두 주기가 60초 간격으로 시작하고 모두 전송 성공
+- 두 번째 주기: Codex 5시간 50%·주간 23%, Claude 5시간 4%·주간 6%
+- 별도 프로세스의 중복 실행 차단, `Ctrl+C` 종료 로그와 종료 후 재실행 확인
+- 사용자가 기기의 `MAC`, 사용량 및 Claude 리셋 시각이 정상 표시됨을 확인
+- 테스트 48개, Ruff 검사·포맷 검사, mypy 통과. 장애 격리·재시도·로그 회전은 자동 테스트로 확인
+
+검증 중 Windows 전용 오류창 코드에 OS 조건을 명시해 macOS에서도 mypy가 통과하도록
+수정했습니다. 수 시간 이상의 연속 운용과 잠자기 복귀는 아직 실기 검증하지 않았습니다.
+
+연결에 실패하면 `appsettings.local.json`의 기기 주소와 같은 로컬 네트워크인지 확인합니다.
+사용량이 `None`이면 터미널에서 `codex-usage` 또는 `claude-usage` 명령으로 오류를 확인합니다.
+Codex 등 샌드박스가 있는 실행 도구에서는 네트워크 및 CLI 인증 환경 접근이 제한될 수 있으므로
+일반 macOS 터미널에서도 확인합니다. 로그는 `tail -f artifacts/logs/monitor.log`로 볼 수 있습니다.
+
+## Phase 9 macOS 메뉴 막대 앱
+
+메뉴 막대 앱을 필요할 때 직접 실행하고 바탕화면 바로가기를 제공하는 방식으로 결정했습니다.
+로그인 항목이나 LaunchAgent는 등록하지 않습니다. 앱을 열면 창과 Dock 아이콘 없이 상단에
+청록색·주황색 막대 아이콘이 나타나고, 시작 직후 기기로 사용량을 전송합니다.
+
+### 설치·실행·제거
+
+Phase 8의 Python·uv·CLI 로그인·기기 설정에 더해, 작은 네이티브 실행 파일을 빌드하기 위한
+Xcode Command Line Tools가 필요합니다. 설치 여부는 `xcrun --find clang`으로 확인합니다.
+도구가 없다면 `xcode-select --install`로 설치한 뒤 진행합니다.
+
+```bash
+# 프로젝트 루트에서 설치 (다른 경로에서는 스크립트의 절대 경로 사용)
+./macos/install-app.sh
+
+# Finder, Spotlight 또는 바탕화면의 GeekMagic AI Monitor를 열어도 같은 앱 실행
+open "$HOME/Applications/GeekMagic AI Monitor.app"
+
+# 메뉴의 '종료'를 선택한 후 앱과 바탕화면 바로가기 제거
+./macos/uninstall-app.sh
+```
+
+- 앱: `~/Applications/GeekMagic AI Monitor.app`
+- 바탕화면 바로가기: `~/Desktop/GeekMagic AI Monitor.app`
+- 현재 화면: 프로젝트의 `artifacts/geekmagic-current.jpg`
+- 운영 로그: 프로젝트의 `artifacts/logs/monitor.log`
+- 시작 오류 로그: 프로젝트의 `artifacts/logs/launcher.log`
+- 갱신 주기 선택: 프로젝트의 `artifacts/tray-settings.json`
+
+바탕화면 항목은 실제 앱을 가리키는 심볼릭 링크이므로 Dock으로 드래그되지 않을 수 있습니다.
+Dock에 고정할 때는 Finder에서 `~/Applications`를 열고 실제 `GeekMagic AI Monitor.app`을
+Dock의 앱 영역으로 드래그합니다. Dock 아이콘으로 실행해도 앱 창이나 실행 표시 없이 메뉴 막대에서
+동작합니다. Dock에 추가한 뒤 바탕화면 바로가기는 삭제해도 됩니다. 실제 앱과 Dock 항목은
+유지되며, 설치 명령을 다시 실행하면 바탕화면 바로가기가 다시 만들어집니다.
+
+설치 명령을 다시 실행하면 이 프로젝트의 앱을 갱신합니다. 같은 이름의 다른 앱이나
+바탕화면 파일이 있으면 덮어쓰지 않고 오류를 표시합니다. 설치·제거 전에 모니터를 종료해야
+하며, 제거해도 프로젝트와 설정·로그는 유지됩니다.
+
+이 앱은 **현재 프로젝트와 `.venv`를 사용하는 로컬 실행 앱**입니다. 실행할 때 셸 설정이나
+Codex 내부 실행 환경에 의존하지 않도록 설치 당시의 Codex·Claude·Node 실행 경로를 저장합니다.
+인증 파일이나 토큰은 복사하지 않습니다. 프로젝트를 이동하거나 Python 환경 및 CLI 설치 경로를
+변경했다면 `uv sync --locked` 후 설치 명령을 다시 실행합니다. 앱만 다른 Mac에 복사해서
+사용하는 배포용 패키지는 아닙니다.
+
+### 메뉴와 종료 동작
+
+아이콘을 클릭하면 다음 메뉴를 표시합니다.
+
+- `상태`: 시작 중, 업데이트 중, 정상 및 마지막 업데이트 시각, 오류 및 다음 주기 재시도
+- `지금 갱신`: 대기 중이면 바로 갱신, 진행 중이면 완료 직후 갱신
+- `갱신 주기`: 1분·5분·10분 선택 및 현재 선택에 체크 표시. 재실행 후에도 유지
+- `로그 열기`: TextEdit으로 운영 로그 열기
+- `종료`: provider와 HTTP 작업을 정리한 뒤 아이콘과 프로세스 종료
+
+Windows의 메뉴 기능을 공유하지만 Mac의 상태 행은 클릭 알림 없이 메뉴 안에서 읽습니다.
+갱신 주기 선택은 CLI의 `UpdateIntervalSeconds`를 변경하지 않습니다. 앱을 다시 열거나 CLI를
+동시에 실행해도 같은 잠금 파일로 중복 실행을 차단합니다. 앱을 종료해도 기기의 마지막 화면은
+유지됩니다. Mac 잠자기 중에는 전송이 중단됩니다.
+
+[pystray의 macOS 메인 스레드 요구사항](https://pystray.readthedocs.io/en/latest/usage.html)에
+맞춰 UI 변경을 메인 스레드로 전달하고, provider 조회는 별도 스레드의 asyncio 루프에서
+실행합니다. 앱 번들의 `LSUIElement`와 accessory 활성화 정책으로 메뉴 막대에만 표시합니다.
+
+### 문제 해결 및 검증
+
+처음 실행할 때 macOS가 **GeekMagic AI Monitor의 로컬 네트워크 접근**을 요청할 수 있습니다.
+기기 전송을 위해 허용합니다. 거부했다면 시스템 설정의 개인정보 보호 및 보안 → 로컬 네트워크에서
+앱의 접근 상태를 확인합니다. CLI 사용량은 조회되는데 기기 연결만 실패할 때도 이 설정과 기기
+주소를 확인합니다. 일시적인 연결 오류가 나면 앱을 종료하지 않고 다음 주기에서 재시도합니다.
+
+2026-09-07 macOS에서 앱·바탕화면 바로가기 설치, 네이티브 앱 프로세스, CLI 사용량 조회,
+중복 실행 차단과 실제 기기 전송을 확인했습니다. 앱의 전체 번들을 임시 서명하며 실행 파일,
+번들 및 서명 식별자에 모두 `geekmagic-monitor`를 사용합니다. 이 식별자를 유지해야 재설치된
+실행 파일에도 기존 로컬 네트워크 권한이 적용됩니다. 설치 직후 연결이 `Errno 65`로 차단되면
+시스템 설정에서 `geekmagic-monitor`의 로컬 네트워크 권한을 껐다 켠 뒤 앱을 다시 실행합니다.
+14:12:22에 이 복구 절차로 앱을 시작해 Codex 5시간 74%·주간 43%, Claude 5시간 10%·주간
+11%를 읽었고, `SmallTV-Ultra / Ultra-V9.0.51` 확인 후 14:12:26에 전송했습니다.
+
+테스트 55개, Ruff 검사·포맷 검사, macOS·Windows 대상 mypy가 통과했으며, 설치·재설치·제거,
+이전 번들 식별자 마이그레이션, 다른 파일 보호, UI 갱신 전달, 종료 전 비동기 정리를 자동
+테스트로 확인했습니다. 네트워크 오류 로그에는 하위 소켓 오류까지 기록해 권한 거부의
+`Errno 65`와 실제 연결 장애를 구분합니다.
+
 ## 단계별 범위
 
 - Phase 1: 장치 probe, 테스트 JPEG 생성, 최소 업로드/표시 명령 — 완료
@@ -340,8 +499,8 @@ Windows 로그인 자동 실행은 사용하지 않습니다. 바탕화면의 `G
 - Phase 5: 60초 update loop — 구현 및 Windows 실기 확인
 - Phase 6: Windows 운영 안정화 및 최종 검증 — 완료
 - Phase 7: Windows 알림 영역 실행 및 바탕화면 바로가기 — 완료 및 실기 확인
-- Phase 8: macOS 실행·실기 검증 — 후순위
-- Phase 9: macOS 실행 방식 결정 — 후순위
+- Phase 8: macOS 실행·실기 검증 — 완료 및 실기 확인
+- Phase 9: macOS 메뉴 막대 앱 및 바탕화면 바로가기 — 완료 및 실기 확인
 
 ## Windows 우선 마무리 순서
 
@@ -362,6 +521,6 @@ Windows 로그인 자동 실행은 사용하지 않습니다. 바탕화면의 `G
 4. 바로가기 실행 후 실제 사용량 조회와 GeekMagic 전송 확인
 5. 설치·업데이트·종료·문제 해결 절차를 README에 정리
 
-Phase 7까지 완료하면 Windows 버전을 일상적으로 사용할 수 있는 상태로 마무리합니다.
-그 이후 Mac을 사용할 수 있을 때 Phase 8과 Phase 9를 진행합니다. Windows Phase 7은
-바로가기 숨김 실행, 알림 영역 동작, 장치 갱신 및 정상 종료까지 실기 확인을 마쳤습니다.
+Windows Phase 7은 바로가기 숨김 실행, 알림 영역 동작, 장치 갱신 및 정상 종료까지 실기
+확인을 마쳤습니다. Phase 8에서 macOS 터미널 실행과 기기 검증을 완료했으며,
+Phase 9에서는 macOS 메뉴 막대 앱과 바탕화면 바로가기를 구현했습니다.

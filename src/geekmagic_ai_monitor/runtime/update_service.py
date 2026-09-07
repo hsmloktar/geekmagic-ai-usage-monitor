@@ -229,4 +229,12 @@ def _format_percent(value: float | None) -> str:
 
 
 def _compact_error(error: Exception) -> str:
-    return " ".join(str(error).split())[:240] or "unknown error"
+    parts: list[str] = []
+    current: BaseException | None = error
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        detail = " ".join(str(current).split()) or "unknown error"
+        parts.append(f"{type(current).__name__}: {detail}")
+        current = current.__cause__ or current.__context__
+    return " <- ".join(parts)[:500]

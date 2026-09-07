@@ -30,7 +30,7 @@ _WEEK_PATTERN = re.compile(
     re.MULTILINE,
 )
 _RESET_PATTERN = re.compile(
-    r"^(?P<month>[A-Za-z]{3})\s+(?P<day>\d{1,2}),\s+"
+    r"^(?P<month>[A-Za-z]{3})\s+(?P<day>\d{1,2})(?:,\s+|\s+at\s+)"
     r"(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?"
     r"(?P<meridiem>am|pm)\s+\((?P<timezone>[^)]+)\)$",
     re.IGNORECASE,

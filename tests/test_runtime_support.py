@@ -58,8 +58,7 @@ def test_runtime_logger_keeps_only_today_when_starting(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     Path(f"{log_path}.1").write_text(
-        "2026-09-03 20:00:00 INFO previous backup\n"
-        "2026-09-04 07:00:00 INFO today backup\n",
+        "2026-09-03 20:00:00 INFO previous backup\n2026-09-04 07:00:00 INFO today backup\n",
         encoding="utf-8",
     )
 

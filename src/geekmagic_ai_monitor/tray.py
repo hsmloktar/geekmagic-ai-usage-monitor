@@ -1,4 +1,4 @@
-"""Windowless Windows system-tray host for the update service."""
+"""Windows tray and macOS menu-bar host for the update service."""
 
 from __future__ import annotations
 
@@ -8,7 +8,9 @@ import json
 import subprocess
 import sys
 import threading
+from collections.abc import Callable
 from datetime import datetime
+from importlib import import_module
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -68,7 +70,12 @@ class TrayApplication:
             icon=create_tray_image(),
             title="GeekMagic AI Monitor · 시작 중",
             menu=Menu(
-                MenuItem(self._status_menu_text, self._show_status, default=True),
+                MenuItem(
+                    self._status_menu_text,
+                    self._show_status,
+                    default=sys.platform == "win32",
+                    enabled=sys.platform == "win32",
+                ),
                 Menu.SEPARATOR,
                 MenuItem("지금 갱신", self._request_update),
                 MenuItem("갱신 주기", interval_menu),
@@ -79,11 +86,11 @@ class TrayApplication:
         )
 
     def run(self) -> None:
-        """Block in the Windows tray message loop until Exit is selected."""
+        """Block in the native main-thread message loop until Exit is selected."""
         self._icon.run(setup=self._setup)
 
     def _setup(self, icon: Icon) -> None:
-        icon.visible = True
+        _dispatch_ui(lambda: setattr(icon, "visible", True))
         try:
             asyncio.run(self._run_monitor())
         except Exception as error:
@@ -91,12 +98,9 @@ class TrayApplication:
                 f"Tray monitor failed ({type(error).__name__}): {_compact_error(error)}"
             )
             self._set_status("오류 · 로그 확인")
-            try:
-                icon.notify("모니터 오류가 발생했습니다. 로그를 확인하세요.", "GeekMagic")
-            except Exception:
-                pass
         finally:
-            icon.stop()
+            # Stop the UI only after asyncio has closed providers and the HTTP client.
+            _dispatch_ui(icon.stop)
 
     async def _run_monitor(self) -> None:
         self._event_loop = asyncio.get_running_loop()
@@ -114,7 +118,7 @@ class TrayApplication:
                 image_file_name=self._settings.geekmagic.image_file_name,
                 output_path=self._output_path,
                 update_interval_seconds=interval_seconds,
-                source_device="WIN",
+                source_device="MAC" if sys.platform == "darwin" else "WIN",
                 logger=self._monitor_log,
             )
             self._update_service = service
@@ -143,6 +147,11 @@ class TrayApplication:
     def _set_status(self, value: str) -> None:
         with self._status_lock:
             self._status = value
+        _dispatch_ui(self._refresh_status)
+
+    def _refresh_status(self) -> None:
+        with self._status_lock:
+            value = self._status
         self._icon.title = f"GeekMagic AI Monitor · {value}"
         self._icon.update_menu()
 
@@ -213,10 +222,13 @@ class TrayApplication:
     def _open_log(self, _: Icon, __: MenuItem) -> None:
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
         self._log_path.touch(exist_ok=True)
-        subprocess.Popen(
-            ["notepad.exe", str(self._log_path.resolve())],
-            creationflags=0x08000000,  # CREATE_NO_WINDOW
-        )
+        if sys.platform == "darwin":
+            subprocess.Popen(["/usr/bin/open", "-a", "TextEdit", str(self._log_path.resolve())])
+        else:
+            subprocess.Popen(
+                ["notepad.exe", str(self._log_path.resolve())],
+                creationflags=0x08000000,  # CREATE_NO_WINDOW
+            )
 
     def _request_exit(self, icon: Icon, _: MenuItem) -> None:
         self._runtime_log("Tray exit requested by user.")
@@ -225,7 +237,22 @@ class TrayApplication:
         task = self._monitor_task
         if loop is not None and task is not None:
             loop.call_soon_threadsafe(task.cancel)
-        icon.stop()
+
+
+def _dispatch_ui(callback: Callable[[], None]) -> None:
+    """Cocoa UI objects must only be changed on the main thread."""
+    if sys.platform == "darwin" and threading.current_thread() is not threading.main_thread():
+        app_helper = import_module("PyObjCTools.AppHelper")
+        app_helper.callAfter(callback)
+    else:
+        callback()
+
+
+def _configure_macos_app() -> None:
+    appkit = import_module("AppKit")
+    appkit.NSApplication.sharedApplication().setActivationPolicy_(
+        appkit.NSApplicationActivationPolicyAccessory
+    )
 
 
 def create_tray_image() -> Image.Image:
@@ -268,7 +295,7 @@ def _save_tray_interval_minutes(path: Path, minutes: int) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="GeekMagic AI Monitor Windows tray host")
+    parser = argparse.ArgumentParser(description="GeekMagic AI Monitor tray / menu-bar host")
     parser.add_argument("--settings-dir", type=Path, default=Path.cwd())
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--log-file", type=Path, default=DEFAULT_LOG_FILE)
@@ -278,8 +305,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
-    if sys.platform != "win32":
-        print("The tray host is currently supported on Windows only.", file=sys.stderr)
+    if sys.platform not in {"win32", "darwin"}:
+        print("The tray host supports Windows and macOS only.", file=sys.stderr)
         return 1
 
     try:
@@ -287,14 +314,17 @@ def main() -> int:
             SingleInstanceLock(args.lock_file),
             RuntimeLogger(args.log_file, console=False) as runtime_log,
         ):
-            runtime_log("Windows tray monitor starting.")
+            if sys.platform == "darwin":
+                _configure_macos_app()
+            system = "macOS" if sys.platform == "darwin" else "Windows"
+            runtime_log(f"{system} tray monitor starting.")
             TrayApplication(
                 settings_dir=args.settings_dir,
                 output_path=args.output,
                 log_path=args.log_file,
                 runtime_log=runtime_log,
             ).run()
-            runtime_log("Windows tray monitor stopped.")
+            runtime_log("Tray monitor stopped.")
         return 0
     except AlreadyRunningError:
         return 0
@@ -304,6 +334,18 @@ def main() -> int:
 
 
 def _show_startup_error(message: str) -> None:
+    if sys.platform == "darwin":
+        appkit = import_module("AppKit")
+        alert = appkit.NSAlert.alloc().init()
+        alert.setMessageText_("GeekMagic AI Monitor를 시작하지 못했습니다.")
+        alert.setInformativeText_(message)
+        alert.runModal()
+        return
+
+    if sys.platform != "win32":
+        print(f"Error: {message}", file=sys.stderr)
+        return
+
     try:
         import ctypes
 

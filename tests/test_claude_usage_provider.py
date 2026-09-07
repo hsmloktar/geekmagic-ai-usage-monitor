@@ -55,6 +55,27 @@ async def test_claude_provider_allows_missing_reset_times() -> None:
     assert usage.weekly_reset_at is None
 
 
+async def test_claude_provider_maps_macos_reset_text_and_all_models_week() -> None:
+    async def read_usage() -> Mapping[str, object]:
+        return _command_payload(
+            "You are currently using your subscription to power your Claude Code usage\n\n"
+            "Current session: 2% used · resets Sep 6 at 9:59pm (Asia/Seoul)\n"
+            "Current week (all models): 6% used · resets Sep 11 at 11:59pm (Asia/Seoul)\n"
+            "Current week (Fable): 8% used · resets Sep 11 at 11:59pm (Asia/Seoul)"
+        )
+
+    usage = await ClaudeUsageProvider(
+        ClaudeSettings(),
+        usage_command_reader=read_usage,
+        clock=lambda: datetime(2026, 9, 6, 8, 0, tzinfo=UTC),
+    ).get_usage()
+
+    assert usage.five_hour_used_percent == 2
+    assert usage.weekly_used_percent == 6
+    assert usage.five_hour_reset_at == datetime(2026, 9, 6, 12, 59, tzinfo=UTC)
+    assert usage.weekly_reset_at == datetime(2026, 9, 11, 14, 59, tzinfo=UTC)
+
+
 async def test_claude_provider_allows_missing_five_hour_limit() -> None:
     async def read_usage() -> Mapping[str, object]:
         return _command_payload(

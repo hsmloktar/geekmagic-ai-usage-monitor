@@ -10,6 +10,7 @@ from PIL import Image
 from geekmagic_ai_monitor.geekmagic import FirmwareIdentity, FirmwareProfile
 from geekmagic_ai_monitor.rendering import DashboardRenderer
 from geekmagic_ai_monitor.runtime import UpdateService
+from geekmagic_ai_monitor.runtime.update_service import _compact_error
 from geekmagic_ai_monitor.usage import UsageInfo
 
 
@@ -60,6 +61,19 @@ class FakeDevice:
 
 def _fixed_clock() -> datetime:
     return datetime(2026, 9, 2, 22, 30, tzinfo=UTC)
+
+
+def test_compact_error_includes_nested_socket_cause() -> None:
+    try:
+        try:
+            raise OSError(65, "No route to host")
+        except OSError as error:
+            raise RuntimeError("All connection attempts failed") from error
+    except RuntimeError as error:
+        message = _compact_error(error)
+
+    assert "RuntimeError: All connection attempts failed" in message
+    assert "OSError: [Errno 65] No route to host" in message
 
 
 async def test_update_once_builds_snapshot_renders_and_pushes(tmp_path: Path) -> None:
